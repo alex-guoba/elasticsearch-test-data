@@ -26,16 +26,42 @@ upload_data_count = 0
 _dict_data = None
 
 
+def delete_documents():
+    url = "%s/%s/_delete_by_query?conflicts=proceed" % (tornado.options.options.es_url, idx_name)
+    _del_all = '''{"query": {"match_all": {} }}'''
+    request = tornado.httpclient.HTTPRequest(url, method="POST", body=_del_all, headers=headers,
+            request_timeout=_deltimeout,
+            auth_username=tornado.options.options.username,
+            auth_password=tornado.options.options.password,
+            validate_cert=tornado.options.options.validate_cert)
+    response = tornado.httpclient.HTTPClient().fetch(request)
+    logging.info('Deleting all documents "%s" done   %s' % (idx_name, response.body))
+
+def get_es_info():
+    try:
+        request = tornado.httpclient.HTTPRequest(tornado.options.options.es_url,
+                headers=headers, method="GET", request_timeout=tornado.options.options.http_upload_timeout,
+                auth_username=tornado.options.options.username,
+                auth_password=tornado.options.options.password,
+                validate_cert=tornado.options.options.validate_cert)
+        response = tornado.httpclient.HTTPClient().fetch(request)
+        return json.loads(response.body)
+    except Exception as ex:
+        logging.exception(ex)
 
 def delete_index(idx_name):
+    _deltimeout = 3000
     try:
         url = "%s/%s?refresh=true" % (tornado.options.options.es_url, idx_name)
-        request = tornado.httpclient.HTTPRequest(url, headers=headers, method="DELETE", request_timeout=240, auth_username=tornado.options.options.username, auth_password=tornado.options.options.password, validate_cert=tornado.options.options.validate_cert)
+        request = tornado.httpclient.HTTPRequest(url, headers=headers, method="DELETE",
+                request_timeout=_deltimeout,
+                auth_username=tornado.options.options.username,
+                auth_password=tornado.options.options.password,
+                validate_cert=tornado.options.options.validate_cert)
         response = tornado.httpclient.HTTPClient().fetch(request)
         logging.info('Deleting index  "%s" done   %s' % (idx_name, response.body))
-    except tornado.httpclient.HTTPError:
-        pass
-
+    except Exception as ex:
+        logging.exception(ex)
 
 def create_index(idx_name):
     schema = {
@@ -53,10 +79,8 @@ def create_index(idx_name):
         request = tornado.httpclient.HTTPRequest(url, headers=headers, method="PUT", body=body, request_timeout=240, auth_username=tornado.options.options.username, auth_password=tornado.options.options.password, validate_cert=tornado.options.options.validate_cert)
         response = tornado.httpclient.HTTPClient().fetch(request)
         logging.info('Creating index "%s" done   %s' % (idx_name, response.body))
-    except tornado.httpclient.HTTPError:
-        logging.info('Looks like the index exists already')
-        pass
-
+    except Exception as ex:
+        logging.info(ex)
 
 @tornado.gen.coroutine
 def upload_batch(upload_data_txt):
@@ -101,7 +125,7 @@ def get_data_for_format(format):
         min = 0 if len(split_f) < 3 else int(split_f[2])
         max = min + 100000 if len(split_f) < 4 else int(split_f[3])
         return_val = generate_count(min, max)
-    
+
     elif field_type == "ipv4":
         return_val = "{0}.{1}.{2}.{3}".format(generate_count(0, 245),generate_count(0, 245),generate_count(0, 245),generate_count(0, 245))
 
@@ -156,7 +180,6 @@ def generate_random_doc(format):
     global id_counter
 
     res = {}
-
     for f in format:
         f_key, f_val = get_data_for_format(f)
         if f_key:
@@ -170,12 +193,9 @@ def generate_random_doc(format):
         id_counter += 1
     elif tornado.options.options.id_type == 'uuid4':
         res['_id'] = str(uuid.uuid4())
-
     return res
 
-
 def set_index_refresh(val):
-
     params = {"index": {"refresh_interval": val}}
     body = json.dumps(params)
     url = "%s/%s/_settings" % (tornado.options.options.es_url, tornado.options.options.index_name)
@@ -190,6 +210,13 @@ def set_index_refresh(val):
 
 @tornado.gen.coroutine
 def generate_test_data():
+
+    esinfo = get_es_info()
+    if not esinfo:
+        logging.error("fetch esinfo error")
+        return
+
+    logging.info(json.dumps(esinfo, indent=2))
 
     global upload_data_count
 
@@ -259,20 +286,20 @@ def generate_test_data():
 
 
 if __name__ == '__main__':
-    tornado.options.define("es_url", type=str, default='http://localhost:9200/', help="URL of your Elasticsearch node")
+    tornado.options.define("es_url", type=str, default='http://localhost:9200', help="URL of your Elasticsearch node")
     tornado.options.define("index_name", type=str, default='test_data', help="Name of the index to store your messages")
     tornado.options.define("index_type", type=str, default='test_type', help="Type")
     tornado.options.define("batch_size", type=int, default=1000, help="Elasticsearch bulk index batch size")
     tornado.options.define("num_of_shards", type=int, default=2, help="Number of shards for ES index")
     tornado.options.define("http_upload_timeout", type=int, default=3, help="Timeout in seconds when uploading data")
     tornado.options.define("count", type=int, default=100000, help="Number of docs to generate")
-    tornado.options.define("format", type=str, default='name:str,age:int,last_updated:ts', help="message format")
+    tornado.options.define("format", type=str, default='name:str,age:int,last_updated:ts,topic:words,remark:text,ext:dict', help="message format")
     tornado.options.define("num_of_replicas", type=int, default=0, help="Number of replicas for ES index")
     tornado.options.define("force_init_index", type=bool, default=False, help="Force deleting and re-initializing the Elasticsearch index")
     tornado.options.define("set_refresh", type=bool, default=False, help="Set refresh rate to -1 before starting the upload")
     tornado.options.define("out_file", type=str, default=False, help="If set, write test data to out_file as well.")
     tornado.options.define("id_type", type=str, default=None, help="Type of 'id' to use for the docs, valid settings are int and uuid4, None is default")
-    tornado.options.define("dict_file", type=str, default=None, help="Name of dictionary file to use")
+    tornado.options.define("dict_file", type=str, default='./test/dict_file', help="Name of dictionary file to use")
     tornado.options.define("username", type=str, default=None, help="Username for elasticsearch")
     tornado.options.define("password", type=str, default=None, help="Password for elasticsearch")
     tornado.options.define("validate_cert", type=bool, default=True, help="SSL validate_cert for requests. Use false for self-signed certificates.")
