@@ -172,7 +172,8 @@ def get_data_for_format(format):
         for _ in range(count):
             word_len = random.randrange(3, 10)
             words.append("".join([random.choice(string.ascii_letters + string.digits) for x in range(word_len)]))
-        return_val = " ".join(words)
+        #return_val = " ".join(words)
+        return_val = words # set to array
 
     elif field_type == "dict":
         global _dict_data
@@ -320,13 +321,13 @@ if __name__ == '__main__':
     tornado.options.define("num_of_shards", type=int, default=2, help="Number of shards for ES index")
     tornado.options.define("http_upload_timeout", type=int, default=3, help="Timeout in seconds when uploading data")
     tornado.options.define("count", type=int, default=100000, help="Number of docs to generate")
-    tornado.options.define("format", type=str, default='name:str,age:int,last_updated:ts,topic:words,remark:text,ext:dict', help="message format")
+    tornado.options.define("format", type=str, default='name:str,age:int:10:60,last_updated:ts,topic:words,remark:text,ext:dict', help="message format")
     tornado.options.define("num_of_replicas", type=int, default=0, help="Number of replicas for ES index")
     tornado.options.define("force_init_index", type=bool, default=False, help="Force deleting and re-initializing the Elasticsearch index")
     tornado.options.define("set_refresh", type=bool, default=False, help="Set refresh rate to -1 before starting the upload")
     tornado.options.define("out_file", type=str, default=False, help="If set, write test data to out_file as well.")
     tornado.options.define("id_type", type=str, default=None, help="Type of 'id' to use for the docs, valid settings are int and uuid4, None is default")
-    tornado.options.define("dict_file", type=str, default='./test/dict_file', help="Name of dictionary file to use")
+    tornado.options.define("dict_file", type=str, default='./data_test/dict_file', help="Name of dictionary file to use")
     tornado.options.define("username", type=str, default=None, help="Username for elasticsearch")
     tornado.options.define("password", type=str, default=None, help="Password for elasticsearch")
     tornado.options.define("validate_cert", type=bool, default=True, help="SSL validate_cert for requests. Use false for self-signed certificates.")
